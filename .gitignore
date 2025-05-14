@@ -1,3 +1,6 @@
 # Ignore everything in the below folder(s)
 datasets/
 extra/
+*.keras
+*.pkl
+
