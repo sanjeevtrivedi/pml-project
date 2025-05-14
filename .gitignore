@@ -1,3 +1,7 @@
 # Ignore everything in the below folder(s)
 datasets/
 extra/
+.ipynb_checkpoints/
+
+#virtual-env name, you can add yours if you wish
+tensorflow/
