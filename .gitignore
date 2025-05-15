@@ -4,6 +4,7 @@ extra/
 .ipynb_checkpoints/
 *.keras
 *.pkl
+.DS_Store
 
 #virtual-env name, you can add yours if you wish
 tensorflow/
