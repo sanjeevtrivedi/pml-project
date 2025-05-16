@@ -1,175 +1,94 @@
+**Slide 1: Objective**
 
----
+* Build a high-performing image classification system without relying on deep learning, specifically CNNs, to demonstrate the potential of traditional machine learning when designed thoughtfully.
+* Illustrate that effective feature engineering and model selection can lead to competitive results without the overhead of deep learning.
+* Focus on delivering a solution that is not only accurate but also interpretable, resource-efficient, and easy to deploy across different environments.
 
-### **Slide 1: Project Title**
+**Slide 2: Dataset and Preprocessing**
 
-**Clustering and Classification of Unlabelled Handwritten Images**
-*Using Deep Feature Extraction and Pseudo-Labelling*
+* Dataset consists of 28x28 grayscale digit images stored in `.npy` format for efficient loading and manipulation.
+* Pixel values are normalized to the \[0, 1] range, which is a standard preprocessing step that improves numerical stability and convergence during learning.
+* An 80:20 train-validation split is used to allow performance evaluation while retaining sufficient data for training. The random seed ensures reproducibility.
+* These steps ensure consistency, fair evaluation, and preparedness for downstream modeling.
 
-This project is focused on enabling intelligent classification of image data in situations where manual labelling is either unavailable or infeasible. We explore how deep learning and clustering methods can work in tandem to unlock structure and meaning from raw image pixels.
+**Slide 3: Feature Extraction Using HOG**
 
----
+* With CNNs disallowed, Histogram of Oriented Gradients (HOG) is chosen for its ability to capture edge and shape information, which are critical for distinguishing digit forms.
+* HOG transforms each image into a descriptor based on gradient orientations, effectively summarizing structural features.
+* Parameters such as 9 orientations and 4x4 cell size are selected based on empirical best practices for 28x28 images.
+* HOG excels at preserving the outline of digits, especially useful for differentiating similar digits like 3 vs 8 or 5 vs 6.
 
-### **Slide 2: Objective**
+**Slide 4: Dimensionality Reduction Using UMAP**
 
-The goal of this project is to build a complete and reusable machine learning pipeline that can:
+* The extracted HOG vectors are high-dimensional, which can slow down learning and lead to overfitting.
+* UMAP (Uniform Manifold Approximation and Projection) is selected to reduce dimensionality while maintaining the topological structure of data.
+* StandardScaler is applied before UMAP to ensure features contribute equally—this is essential as UMAP is sensitive to feature scaling.
+* PCA and UMAP plots are generated to visually verify cluster separation and determine if reduced features retain structure.
 
-* Interpret unlabelled handwritten digit images and uncover meaningful patterns.
-* Convert unsupervised learning output (clusters) into structured, pseudo-labelled data.
-* Train a classifier on this generated data to make predictions on new, unseen inputs.
-* Save and reuse all trained models, so that the system is ready for deployment or integration in production workflows.
+**Slide 5: Clustering – GMM vs KMeans**
 
-The underlying challenge here is to simulate the benefits of supervised learning, even when labels are not provided.
+* UMAP-reduced features are clustered using two techniques to explore unsupervised digit grouping.
+* KMeans assumes spherical clusters and is computationally efficient, but struggles when digit shapes are not evenly distributed.
+* GMM offers soft clustering with probabilistic outputs, enabling better modeling of overlapping or skewed clusters.
+* Both are evaluated using Silhouette Score, Adjusted Rand Index (ARI), and Macro F1 Score to assess compactness, alignment with pseudo-labels, and balance across classes.
+* GMM is chosen for its ability to model uncertainty and capture more realistic cluster boundaries.
 
----
+**Slide 6: Cluster Labeling**
 
-### **Slide 3: Dataset Summary**
+* Clusters from unsupervised learning do not carry semantic meaning, so a labeling step is introduced.
+* Users either manually label clusters based on sampled images or use a predefined mapping for consistency.
+* This process converts the clustering task into a semi-supervised classification problem.
+* Sample visualization ensures clusters correspond to meaningful digit classes and improves label quality.
 
-We work with a dataset of 60,000 handwritten grayscale images, each of size 28×28 pixels. The images are stored in a NumPy `.npy` format, which is efficient to load and avoids the need for image decoding or transformation.
+**Slide 7: SMOTE + Tomek Link Resampling**
 
-Key characteristics:
+* Post-labeling, some digit classes may be underrepresented due to uneven clustering.
+* SMOTE (Synthetic Minority Over-sampling Technique) is used to generate synthetic examples for minority classes.
+* Tomek Link removes borderline samples that cause class overlap, thus improving decision boundaries.
+* This combined strategy improves classifier robustness and ensures class balance for fair training.
 
-* Shape: `(60000, 1, 28, 28)`
-* No associated ground truth labels
-* Ideal use case for unsupervised learning methods like clustering
+**Slide 8: Classifier Evaluation**
 
-This dataset poses a real-world challenge—learning structure purely from raw pixel data without any prior annotations.
+* Random Forest classifiers are trained using three different feature sets:
 
----
+  * Raw flattened pixel values
+  * Scaled HOG features
+  * UMAP-reduced HOG features
+* Each setup is evaluated using Adjusted Rand Index (ARI), Macro F1 Score, and overall accuracy.
+* The UMAP-based classifier significantly outperforms others:
 
-### **Slide 4: Preprocessing Method**
+  * ARI: 0.9756
+  * Macro F1 Score: 0.9889
+* This confirms that dimensionality reduction helps in capturing the most discriminative aspects of digit shapes while also improving computational efficiency.
 
-To make the raw image data usable for deep learning:
+**Slide 9: Final Pipeline and Model Saving**
 
-* **Normalization** is applied by dividing pixel values by 255. This ensures all values lie between 0 and 1, which prevents unstable gradients and speeds up learning.
-* **Reshaping** is performed to match the format expected by convolutional layers in Keras: `(height, width, channels)` = `(28, 28, 1)`.
-* The dataset is split into training and validation sets (80% and 20%). A fixed seed (`random_state=42`) is used to ensure that model results can be reproduced exactly.
+* Based on evaluation, the final pipeline uses HOG + UMAP + Random Forest.
+* The following models and transformers are saved for reuse and deployment:
 
-Each of these steps contributes to training stability, consistency, and compatibility with deep learning frameworks.
+  * `hog_scaler.pkl`: for consistent preprocessing of HOG features.
+  * `umap_model.pkl`: for dimensionality reduction.
+  * `gmm_cluster_model.pkl`: for cluster assignment.
+  * `cluster_to_digit_mapping.pkl`: for translating cluster IDs to digit labels.
+  * `rf_umap_classifier.pkl`: final digit classifier.
+* This modular saving strategy ensures that the entire pipeline can be reloaded and executed in production without retraining.
 
----
+**Slide 10: Prediction Pipeline**
 
-### **Slide 5: Feature Extraction Using CNN**
+* A reusable function `predict_clusters()` encapsulates the end-to-end prediction flow.
+* Accepts a new `.npy` file as input and performs:
 
-Instead of using raw pixels directly, we build a CNN to extract meaningful visual features:
+  * HOG feature extraction
+  * Feature scaling
+  * UMAP projection
+  * GMM-based clustering
+  * Final classification using trained RF model
+* Pseudo-labels from GMM are mapped to digits using the saved mapping.
+* This pipeline supports scalable batch predictions with minimal configuration, and is fully portable.
 
-* The network includes three convolutional layers that detect shapes, curves, and edges.
-* Batch normalization helps speed up training and reduces sensitivity to initialization.
-* MaxPooling reduces spatial dimensions, retaining dominant features.
-* Dropout layers reduce the risk of overfitting, especially important when training without ground truth labels.
+**Slide 11: Conclusion**
 
-The CNN is not trained to classify digits but rather to transform raw pixel data into feature vectors that encode rich semantic information. These features will later be used for clustering.
-
----
-
-### **Slide 6: Using UMAP for Feature Reduction**
-
-Once CNN features are extracted, they are still high-dimensional. To enable effective clustering:
-
-* We reduce them to 10 dimensions using UMAP (Uniform Manifold Approximation and Projection).
-* UMAP is a powerful dimensionality reduction tool that preserves both local neighborhoods and global structure of the data.
-* Compared to PCA or t-SNE, UMAP is faster, scales better with data size, and yields more meaningful clusterable spaces.
-
-UMAP-transformed data becomes the input to clustering algorithms and also feeds into 2D visualizations for human inspection.
-
----
-
-### **Slide 7: Clustering Strategy**
-
-To identify structure in the unlabelled dataset:
-
-* We use **KMeans**, which partitions data into k distinct groups based on distance from centroids.
-* We also use **GMM**, which assumes the data is generated from a mixture of Gaussian distributions.
-
-Both methods are initialized to form 10 clusters, reflecting the assumption that the digits 0 through 9 are represented in the dataset.
-
-Each image is assigned a cluster ID, which is used as a temporary label (pseudo-label). These pseudo-labels act as training targets for the next step.
-
----
-
-### **Slide 8: Cluster Validation via Visualization**
-
-To verify that our clustering process grouped similar images together:
-
-* We visualize samples from each cluster and inspect their visual patterns.
-* For example, Cluster 3 might contain images that resemble '5', while Cluster 7 might show variations of '2'.
-
-This visual inspection validates that the learned features and clustering logic are capturing real-world structure and not just arbitrary pixel similarities. It also reassures us that pseudo-labels are meaningful.
-
----
-
-### **Slide 9: Addressing Imbalance in Pseudo-Labels**
-
-Initial cluster distributions are not uniform—some clusters have far fewer images than others. This is problematic for training supervised classifiers.
-
-To resolve this:
-
-* We apply **SMOTE** to generate synthetic samples for smaller clusters.
-* We apply **Tomek Links** to remove samples that are ambiguous and lie near cluster boundaries.
-
-Together, this creates a dataset where all clusters are represented more evenly, improving model generalization and reducing classifier bias.
-
----
-
-### **Slide 10: Supervised Classification**
-
-Using the rebalanced pseudo-labelled dataset:
-
-* We train a **Random Forest Classifier** using the flattened image data.
-* Random Forest is chosen for its robustness to noise, ability to handle multi-class data, and resistance to overfitting.
-* This classifier learns to associate pixel patterns with pseudo-labels.
-
-The aim here is not to model the original digit labels (which we don’t have) but to learn to predict consistent cluster membership for new data points.
-
----
-
-### **Slide 11: Evaluation Strategy**
-
-To understand how well the model performs, we compute several metrics:
-
-* **Silhouette Score**: Quantifies how tightly grouped the clusters are.
-* **Adjusted Rand Score**: Measures agreement between clustering assignments and classifier predictions.
-* **Macro F1 Score**: Provides a balanced accuracy measure across all clusters.
-* **Confusion Matrix**: Visualizes which clusters the classifier finds hard to distinguish.
-
-Together, these metrics give us a multi-dimensional view of how well the system is learning, clustering, and classifying.
-
----
-
-### **Slide 12: Model Persistence**
-
-To make the pipeline usable beyond the notebook:
-
-* We save the CNN model (`cnn_feature_extractor.keras`) to preserve the feature extraction process.
-* The UMAP model (`.pkl`) is saved to apply the same transformation on new data.
-* Clustering models (KMeans, GMM) and the classifier (Random Forest) are stored for future inference.
-
-This makes the system portable, shareable, and usable on new unlabelled image datasets without retraining from scratch.
-
----
-
-### **Slide 13: Unified Prediction Function**
-
-A function called `predict_clusters()` wraps the entire pipeline into a single callable method:
-
-* It loads new `.npy` data
-* Applies the CNN, UMAP, clustering models, and classifier
-* Returns predicted cluster IDs and classifier outputs
-
-This function enables one-step batch inference and allows the entire workflow to be reused without manual intervention.
-
----
-
-### **Slide 14: Conclusion**
-
-This project shows that it is possible to create a full classification system without access to labelled data:
-
-* CNN-based feature extraction enables images to be represented in a meaningful numeric form.
-* Clustering techniques help uncover structure and grouping in unlabelled data.
-* Pseudo-labels allow training a classifier to predict new images accurately.
-* The pipeline is designed to be modular, reusable, and efficient—suitable for production or research use.
-
-This approach opens possibilities for many domains where labelled data is expensive or unavailable, such as satellite imagery, medical scans, and historical archives.
-
----
-
+* This project demonstrates that classical machine learning, when paired with strong feature engineering and dimensionality reduction, can achieve near-deep-learning accuracy.
+* The HOG + UMAP + RF pipeline is compact, interpretable, and efficient, making it a great alternative when deep learning is not feasible.
+* Every step in the pipeline is motivated by empirical best practices and justified through evaluation metrics.
+* The end result is a modular and reproducible system suitable for deployment in real-world scenarios.
